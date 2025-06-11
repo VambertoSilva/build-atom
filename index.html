@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Modelo de Átomo de Bohr</title>
+    <style>
+      :root {
+        --bg-color: #f0f0f0;
+        --canvas-bg-color: white;
+        --border-color: #ccc;
+        --text-color: #333;
+        --proton-color: #e74c3c; /* Red */
+        --neutron-color: #7f8c8d; /* Gray */
+        --electron-color: #3498db; /* Blue */
+        --electron-valence-color: #f39c12; /* Orange for valence */
+        --orbit-color: #6c7a89; /* Darker blue-gray */
+        --box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        --border-radius: 8px;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        text-align: center;
+        background: var(--bg-color);
+        color: var(--text-color);
+        margin: 0; /* Remove default body margin */
+        padding: 20px;
+        box-sizing: border-box; /* Include padding in element's total width/height */
+        min-height: 100vh; /* Ensure body takes full viewport height */
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      h1 {
+        color: #2c3e50;
+        margin-top: 10px;
+        margin-bottom: 20px;
+      }
+
+      .controls,
+      .info-box {
+        margin-bottom: 20px;
+        background-color: white;
+        padding: 15px;
+        border-radius: var(--border-radius);
+        box-shadow: var(--box-shadow);
+        width: 100%; /* Take full width on small screens */
+        max-width: 600px; /* Limit width on larger screens */
+        box-sizing: border-box;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap; /* Allow items to wrap on smaller screens */
+        justify-content: center;
+        gap: 15px; /* Spacing between labels */
+      }
+
+      label {
+        display: flex; /* Make label and input align */
+        align-items: center;
+        gap: 5px; /* Space between text and input */
+        font-weight: bold;
+        white-space: nowrap; /* Prevent label text from wrapping */
+      }
+
+      input[type="number"] {
+        padding: 8px;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        width: 60px; /* Adjusted for better fit */
+        text-align: center;
+        -moz-appearance: textfield; /* Remove arrows in Firefox */
+        font-size: 1em;
+      }
+
+      /* Remove arrows in Chrome, Safari, Edge */
+      input::-webkit-outer-spin-button,
+      input::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+
+      canvas {
+        background-color: var(--canvas-bg-color);
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius);
+        box-shadow: var(--box-shadow);
+        display: block; /* Remove extra space below canvas */
+
+        /* --- CSS ONLY RESPONSIVENESS FOR CANVAS --- */
+        width: 100%; /* Make canvas fill its container's width */
+        max-width: 500px; /* Max size for desktop, matches JS internal logic */
+        height: auto; /* Maintain aspect ratio based on width */
+        margin: 20px auto; /* Center canvas horizontally and add vertical margin */
+      }
+
+      .info-box {
+        font-size: 1.1em;
+        line-height: 1.6;
+        text-align: left;
+      }
+
+      .info-box p {
+        margin: 5px 0;
+      }
+
+      /* Media Queries for Responsiveness */
+      @media (min-width: 768px) {
+        /* For tablets and desktops */
+        .controls {
+          flex-wrap: nowrap; /* Keep controls in a single row */
+          justify-content: space-around;
+        }
+
+        canvas {
+          /* No change needed here, max-width handles it */
+        }
+      }
+
+      @media (max-width: 767px) {
+        /* For mobile devices */
+        body {
+          padding: 10px;
+        }
+        h1 {
+          font-size: 1.5em;
+        }
+        .controls,
+        .info-box {
+          padding: 10px;
+          margin-bottom: 15px;
+        }
+        label {
+          font-size: 0.9em;
+        }
+        input[type="number"] {
+          width: 50px;
+          padding: 6px;
+        }
+        canvas {
+          /* Already set to width: 100% for mobile */
+          margin-top: 15px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Modelo de Átomo de Bohr</h1>
+
+    <div class="controls">
+      <label
+        >Prótons (Z): <input type="number" id="protons" value="13" min="1"
+      /></label>
+      <label
+        >Nêutrons (N): <input type="number" id="neutrons" value="14" min="0"
+      /></label>
+      <label
+        >Elétrons (e-): <input type="number" id="electrons" value="13" min="0"
+      /></label>
+    </div>
+
+    <div class="info-box">
+      <p id="element-info">Elemento: Carregando...</p>
+      <p id="mass-number-info">Número de Massa (A): Carregando...</p>
+      <p id="charge-info">Carga: Carregando...</p>
+    </div>
+
+    <canvas id="canvas" width="500" height="500"></canvas>
+
+    <script>
+      // --- Constants ---
+      const ELECTRON_RADIUS = 6;
+      const NUCLEON_RADIUS = 7; // Slightly larger for clarity
+      const NUCLEON_SPACING_FACTOR = 1.8; // How tightly packed nucleons are (1.0 = touching)
+      // Original fixed values, as we are not scaling them in JS
+      const ORBIT_START_RADIUS_BASE = 70; // Renamed for clarity, original fixed value
+      const ORBIT_SPACING = 40;
+      const PROTON_COLOR = getComputedStyle(
+        document.documentElement
+      ).getPropertyValue("--proton-color");
+      const NEUTRON_COLOR = getComputedStyle(
+        document.documentElement
+      ).getPropertyValue("--neutron-color");
+      const ELECTRON_COLOR = getComputedStyle(
+        document.documentElement
+      ).getPropertyValue("--electron-color");
+      const VALENCE_ELECTRON_COLOR = getComputedStyle(
+        document.documentElement
+      ).getPropertyValue("--electron-valence-color");
+      const ORBIT_COLOR = getComputedStyle(
+        document.documentElement
+      ).getPropertyValue("--orbit-color");
+
+      const elements = [
+        { Z: 1, name: "Hidrogênio" },
+        { Z: 2, name: "Hélio" },
+        { Z: 3, name: "Lítio" },
+        { Z: 4, name: "Berílio" },
+        { Z: 5, name: "Boro" },
+        { Z: 6, name: "Carbono" },
+        { Z: 7, name: "Nitrogênio" },
+        { Z: 8, name: "Oxigênio" },
+        { Z: 9, name: "Flúor" },
+        { Z: 10, name: "Neônio" },
+        { Z: 11, name: "Sódio" },
+        { Z: 12, name: "Magnésio" },
+        { Z: 13, name: "Alumínio" },
+        { Z: 14, name: "Silício" },
+        { Z: 15, name: "Fósforo" },
+        { Z: 16, name: "Enxofre" },
+        { Z: 17, name: "Cloro" },
+        { Z: 18, name: "Argônio" },
+        { Z: 19, name: "Potássio" },
+        { Z: 20, name: "Cálcio" },
+        { Z: 21, name: "Escândio" },
+        { Z: 22, name: "Titânio" },
+        { Z: 23, name: "Vanádio" },
+        { Z: 24, name: "Cromo" },
+        { Z: 25, name: "Manganês" },
+        { Z: 26, name: "Ferro" },
+        { Z: 27, name: "Cobalto" },
+        { Z: 28, name: "Níquel" },
+        { Z: 29, name: "Cobre" },
+        { Z: 30, name: "Zinco" },
+        { Z: 31, name: "Gálio" },
+        { Z: 32, name: "Germânio" },
+        { Z: 33, name: "Arsênio" },
+        { Z: 34, name: "Selênio" },
+        { Z: 35, name: "Bromo" },
+        { Z: 36, name: "Criptônio" },
+        { Z: 37, name: "Rubídio" },
+        { Z: 38, name: "Estrôncio" },
+        { Z: 39, name: "Ítrio" },
+        { Z: 40, name: "Zircônio" },
+        { Z: 41, name: "Nióbio" },
+        { Z: 42, name: "Molibdênio" },
+        { Z: 43, name: "Tecnécio" },
+        { Z: 44, name: "Rutênio" },
+        { Z: 45, name: "Ródio" },
+        { Z: 46, name: "Paládio" },
+        { Z: 47, name: "Prata" }, // Silver element for testing large nucleus
+        { Z: 48, name: "Cádmio" },
+        { Z: 49, name: "Índio" },
+        { Z: 50, name: "Estanho" },
+        { Z: 51, name: "Antimônio" },
+        { Z: 52, name: "Telúrio" },
+        { Z: 53, name: "Iodo" },
+        { Z: 54, name: "Xenônio" },
+      ];
+
+      // --- Canvas Setup ---
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      // Fixed canvas dimensions for JS drawing context
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+
+      // --- Animation Variables ---
+      let animationFrameId = null;
+      const electronOrbitSpeed = 0.005; // Adjust for faster/slower rotation
+
+      // Store initial angles for each electron to maintain relative positions
+      let currentElectronAngles = [];
+
+      // Global variable to store calculated nucleus bounding radius
+      let currentNucleusBoundingRadius = 0;
+
+      /**
+       * Draws a 3D-like sphere using a radial gradient.
+       * @param {CanvasRenderingContext2D} ctx - The canvas rendering context.
+       * @param {number} x - X coordinate of the sphere center.
+       * @param {number} y - Y coordinate of the sphere center.
+       * @param {number} r - Radius of the sphere.
+       * @param {string} baseColor - The base color for the sphere.
+       */
+      function desenharEsfera3D(ctx, x, y, r, baseColor) {
+        const grad = ctx.createRadialGradient(
+          x - r * 0.3, // Highlight offset X
+          y - r * 0.3, // Highlight offset Y
+          r * 0.2, // Highlight radius
+          x,
+          y,
+          r
+        );
+        grad.addColorStop(0, "white");
+        grad.addColorStop(0.3, baseColor);
+        grad.addColorStop(1, "rgba(0,0,0,0.5)"); // Slight shadow
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.strokeStyle = "rgba(0,0,0,0.1)"; // Subtle border
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+
+      /**
+       * Calculates the positions of all nucleons in a packed cluster.
+       * Returns an array of {x, y, type} and the estimated bounding radius of the nucleus.
+       * @param {number} protons - Number of protons.
+       * @param {number} neutrons - Number of neutrons.
+       * @param {number} centerX - X coordinate of the canvas center.
+       * @param {number} centerY - Y coordinate of the canvas center.
+       * @returns {{particles: Array<{x: number, y: number, type: string}>, boundingRadius: number}}
+       */
+      function calcularNucleonPositions(protons, neutrons, centerX, centerY) {
+        const totalNucleons = protons + neutrons;
+        const nucleusParticles = [];
+        let currentLayer = 0;
+        let nucleonsPlaced = 0;
+        let maxLayerRadius = 0;
+
+        while (nucleonsPlaced < totalNucleons) {
+          const layerRadius =
+            currentLayer * NUCLEON_RADIUS * NUCLEON_SPACING_FACTOR * 0.7;
+          const circumference = 2 * Math.PI * layerRadius;
+          const maxNucleonsInThisLayer =
+            layerRadius === 0
+              ? 1
+              : Math.max(
+                  1,
+                  Math.floor(
+                    circumference / (NUCLEON_RADIUS * NUCLEON_SPACING_FACTOR)
+                  )
+                );
+          const numToPlaceInLayer = Math.min(
+            maxNucleonsInThisLayer,
+            totalNucleons - nucleonsPlaced
+          );
+
+          if (layerRadius === 0 && nucleonsPlaced === 0) {
+            nucleusParticles.push({
+              x: centerX,
+              y: centerY,
+              type: nucleonsPlaced < protons ? "proton" : "neutron",
+            });
+            nucleonsPlaced++;
+            maxLayerRadius = NUCLEON_RADIUS; // Central nucleon contributes to radius
+          } else {
+            for (let i = 0; i < numToPlaceInLayer; i++) {
+              const angle =
+                (i / numToPlaceInLayer) * 2 * Math.PI +
+                (currentLayer % 2 === 0 ? 0 : Math.PI / numToPlaceInLayer);
+              const x = centerX + Math.cos(angle) * layerRadius;
+              const y = centerY + Math.sin(angle) * layerRadius;
+
+              nucleusParticles.push({
+                x,
+                y,
+                type: nucleonsPlaced < protons ? "proton" : "neutron",
+              });
+              nucleonsPlaced++;
+              maxLayerRadius = Math.max(
+                maxLayerRadius,
+                layerRadius + NUCLEON_RADIUS
+              ); // Update max radius
+            }
+          }
+          currentLayer++;
+        }
+
+        // Add a small buffer to the bounding radius
+        const boundingRadius = maxLayerRadius + NUCLEON_RADIUS * 0.5; // Add half a nucleon radius as buffer
+        return { particles: nucleusParticles, boundingRadius: boundingRadius };
+      }
+
+      /**
+       * Draws the atom based on current input values.
+       */
+      function desenharAtomo() {
+        // Stop any ongoing animation before redrawing
+        if (animationFrameId) {
+          cancelAnimationFrame(animationFrameId);
+        }
+
+        // Get and validate input values
+        const protons = Math.max(
+          1,
+          parseInt(document.getElementById("protons").value) || 1
+        );
+        const neutrons = Math.max(
+          0,
+          parseInt(document.getElementById("neutrons").value) || 0
+        );
+        const electrons = Math.max(
+          0,
+          parseInt(document.getElementById("electrons").value) || 0
+        );
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // Use fixed canvas.width/height
+
+        // --- Update Info Box ---
+        updateInfoBox(protons, neutrons, electrons);
+
+        // --- NUCLEUS ---
+        const {
+          particles: nucleusParticles,
+          boundingRadius: calculatedNucleusRadius,
+        } = calcularNucleonPositions(protons, neutrons, centerX, centerY);
+
+        currentNucleusBoundingRadius = calculatedNucleusRadius; // Store for electron orbits
+
+        // Draw nucleons (protons first, then neutrons for consistent coloring)
+        nucleusParticles.sort((a, b) => a.y - b.y); // Sort for better z-ordering
+
+        nucleusParticles.forEach((p) => {
+          const color = p.type === "proton" ? PROTON_COLOR : NEUTRON_COLOR;
+          desenharEsfera3D(ctx, p.x, p.y, NUCLEON_RADIUS, color);
+        });
+
+        // --- ELECTRON SHELLS (Flexible Orbit Length and Dynamic Start) ---
+        let electronsRemaining = electrons;
+        // Start orbits outside the nucleus bounding box with some padding
+        let currentOrbitRadius = Math.max(
+          ORBIT_START_RADIUS_BASE, // Ensures minimum distance for very small nuclei
+          currentNucleusBoundingRadius + ORBIT_SPACING * 0.5 // Start outside nucleus
+        );
+        let shellNumber = 1; // n = 1 for the first shell (K shell)
+
+        // Reset electron angles for the new drawing, clearing previous shell data
+        const newElectronAngles = [];
+
+        // Continue adding shells as long as there are electrons remaining
+        // and the orbits don't go off-canvas (using fixed canvas.width/height)
+        while (
+          electronsRemaining > 0 &&
+          currentOrbitRadius + ELECTRON_RADIUS <
+            Math.min(centerX, centerY) * 0.95
+        ) {
+          // Calculate max electrons for the current shell (2n^2 rule)
+          const maxElectronsInShell = 2 * Math.pow(shellNumber, 2);
+          const numElectronsInCurrentShell = Math.min(
+            electronsRemaining,
+            maxElectronsInShell
+          );
+
+          // Draw orbit path
+          ctx.beginPath();
+          ctx.setLineDash([5, 5]); // Dashed line for orbit
+          ctx.arc(centerX, centerY, currentOrbitRadius, 0, 2 * Math.PI);
+          ctx.strokeStyle = ORBIT_COLOR;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          // Transfer existing angles or create new ones for this shell
+          if (
+            currentElectronAngles[shellNumber - 1] &&
+            currentElectronAngles[shellNumber - 1].length >=
+              numElectronsInCurrentShell
+          ) {
+            // If previous angles exist and are sufficient, reuse them
+            newElectronAngles[shellNumber - 1] = currentElectronAngles[
+              shellNumber - 1
+            ].slice(0, numElectronsInCurrentShell);
+          } else {
+            // Otherwise, initialize or extend
+            newElectronAngles[shellNumber - 1] = [];
+            for (let j = 0; j < numElectronsInCurrentShell; j++) {
+              const existingAngle = currentElectronAngles[shellNumber - 1]
+                ? currentElectronAngles[shellNumber - 1][j]
+                : undefined;
+              newElectronAngles[shellNumber - 1][j] =
+                existingAngle !== undefined
+                  ? existingAngle
+                  : (j / numElectronsInCurrentShell) * 2 * Math.PI;
+            }
+          }
+
+          // Draw electrons for this shell
+          for (let j = 0; j < numElectronsInCurrentShell; j++) {
+            // Determine if this is the outermost shell
+            const isValenceShell =
+              electronsRemaining - numElectronsInCurrentShell === 0;
+            const electronColor = isValenceShell
+              ? VALENCE_ELECTRON_COLOR
+              : ELECTRON_COLOR;
+
+            const angle = newElectronAngles[shellNumber - 1][j]; // Use stored or new angle
+            const x = centerX + Math.cos(angle) * currentOrbitRadius;
+            const y = centerY + Math.sin(angle) * currentOrbitRadius;
+
+            desenharEsfera3D(ctx, x, y, ELECTRON_RADIUS, electronColor);
+          }
+
+          electronsRemaining -= numElectronsInCurrentShell;
+          currentOrbitRadius += ORBIT_SPACING;
+          shellNumber++;
+        }
+
+        currentElectronAngles = newElectronAngles; // Update the global array for animation
+
+        // Start animation loop
+        animateElectrons();
+      }
+
+      /**
+       * Updates the information box with element name, mass number, and charge.
+       * @param {number} protons - Number of protons.
+       * @param {number} neutrons - Number of neutrons.
+       * @param {number} electrons - Number of electrons.
+       */
+      function updateInfoBox(protons, neutrons, electrons) {
+        const elementInfoElem = document.getElementById("element-info");
+        const massNumberInfoElem = document.getElementById("mass-number-info");
+        const chargeInfoElem = document.getElementById("charge-info");
+
+        // Element Name
+        const element = elements.find((el) => el.Z === protons);
+        if (element) {
+          elementInfoElem.textContent = `Elemento: ${element.name} (Z=${protons})`;
+        } else {
+          elementInfoElem.textContent = `Elemento: Desconhecido (Z=${protons})`;
+        }
+
+        // Mass Number (A = Z + N)
+        const massNumber = protons + neutrons;
+        massNumberInfoElem.textContent = `Número de Massa (A): ${massNumber}`;
+
+        // Charge
+        const charge = protons - electrons;
+        let chargeText = "";
+        if (charge > 0) {
+          chargeText = `+${charge} (Cátion)`;
+        } else if (charge < 0) {
+          chargeText = `${charge} (Ânion)`;
+        } else {
+          chargeText = `0 (Neutro)`;
+        }
+        chargeInfoElem.textContent = `Carga: ${chargeText}`;
+      }
+
+      /**
+       * Animation loop for electron movement.
+       */
+      function animateElectrons() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // Use fixed canvas.width/height
+
+        // --- Redraw Nucleus ---
+        const protons = parseInt(document.getElementById("protons").value);
+        const neutrons = parseInt(document.getElementById("neutrons").value);
+        const { particles: nucleusParticles } = calcularNucleonPositions(
+          protons,
+          neutrons,
+          centerX,
+          centerY
+        );
+        nucleusParticles.sort((a, b) => a.y - b.y); // Sort for drawing order
+        nucleusParticles.forEach((p) => {
+          const color = p.type === "proton" ? PROTON_COLOR : NEUTRON_COLOR;
+          desenharEsfera3D(ctx, p.x, p.y, NUCLEON_RADIUS, color);
+        });
+
+        // --- Redraw Electron Orbits and Electrons (Flexible Orbit Length and Dynamic Start) ---
+        const electrons = parseInt(document.getElementById("electrons").value);
+        let electronsRemaining = electrons;
+        let currentOrbitRadius = Math.max(
+          ORBIT_START_RADIUS_BASE,
+          currentNucleusBoundingRadius + ORBIT_SPACING * 0.5
+        );
+        let shellNumber = 1;
+
+        while (
+          electronsRemaining > 0 &&
+          currentOrbitRadius + ELECTRON_RADIUS <
+            Math.min(centerX, centerY) * 0.95
+        ) {
+          const maxElectronsInShell = 2 * Math.pow(shellNumber, 2);
+          const numElectronsInCurrentShell = Math.min(
+            electronsRemaining,
+            maxElectronsInShell
+          );
+
+          // Draw orbit path
+          ctx.beginPath();
+          ctx.setLineDash([5, 5]);
+          ctx.arc(centerX, centerY, currentOrbitRadius, 0, 2 * Math.PI);
+          ctx.strokeStyle = ORBIT_COLOR;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          // Update and draw electrons for this shell
+          for (let j = 0; j < numElectronsInCurrentShell; j++) {
+            // Update angle for animation
+            // Use shellNumber for speed makes inner shells faster
+            if (
+              currentElectronAngles[shellNumber - 1] &&
+              currentElectronAngles[shellNumber - 1][j] !== undefined
+            ) {
+              currentElectronAngles[shellNumber - 1][j] +=
+                electronOrbitSpeed / shellNumber;
+            } else {
+              // This shouldn't happen if desenharAtomo manages currentElectronAngles well,
+              // but as a fallback, initialize if somehow missing.
+              currentElectronAngles[shellNumber - 1] =
+                currentElectronAngles[shellNumber - 1] || [];
+              currentElectronAngles[shellNumber - 1][j] =
+                (j / numElectronsInCurrentShell) * 2 * Math.PI +
+                electronOrbitSpeed / shellNumber;
+            }
+
+            // Determine if this is the outermost shell
+            const isValenceShell =
+              electronsRemaining - numElectronsInCurrentShell === 0;
+            const electronColor = isValenceShell
+              ? VALENCE_ELECTRON_COLOR
+              : ELECTRON_COLOR;
+
+            const angle = currentElectronAngles[shellNumber - 1][j];
+            const x = centerX + Math.cos(angle) * currentOrbitRadius;
+            const y = centerY + Math.sin(angle) * currentOrbitRadius;
+
+            desenharEsfera3D(ctx, x, y, ELECTRON_RADIUS, electronColor);
+          }
+
+          electronsRemaining -= numElectronsInCurrentShell;
+          currentOrbitRadius += ORBIT_SPACING;
+          shellNumber++;
+        }
+
+        animationFrameId = requestAnimationFrame(animateElectrons);
+      }
+
+      // --- Event Listeners ---
+      document.addEventListener("DOMContentLoaded", () => {
+        // Initial draw when the page loads
+        desenharAtomo();
+
+        // Add event listeners for real-time updates
+        document
+          .getElementById("protons")
+          .addEventListener("input", desenharAtomo);
+        document
+          .getElementById("neutrons")
+          .addEventListener("input", desenharAtomo);
+        document
+          .getElementById("electrons")
+          .addEventListener("input", desenharAtomo);
+      });
+    </script>
+  </body>
+</html>
